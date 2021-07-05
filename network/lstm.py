@@ -8,10 +8,7 @@ class LSTMClassifier(nn.Module):
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.num_layers = num_layers
-        if isbi:
-            self.num_directions = 2
-        else:
-            self.num_directions = 1
+        self.num_directions = 2
 
         self.lstm = nn.LSTM(input_size=input_size, hidden_size=hidden_size, num_layers=num_layers, batch_first=True, bidirectional=True)
         self.linear = nn.Linear(hidden_size * self.num_directions + 5, 5)
