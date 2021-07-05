@@ -15,12 +15,12 @@ opts.EmptyLineRule = "read";
 % Specify variable properties
 opts = setvaropts(opts, "rcrdtime", "InputFormat", "HH:mm:ss");
 % Import the data
-shhs1dataset = readtable("./shhs/shhs1-dataset-0.15.0.csv", opts);
+shhs1dataset = readtable("./raws/shhs/shhs1-dataset-0.15.0.csv", opts);
 clear opts
 %% Variable Setting %%
 % data_dir MUST include both psg and hypnogram file!
-data_dir = "./shhs/polysomnography/edfs/shhs1/";
-annot_dir = "./shhs/polysomnography/annotations-events-nsrr/shhs1/";
+data_dir = "./raws/shhs/polysomnography/edfs/shhs1/";
+annot_dir = "./raws/shhs/polysomnography/annotations-events-nsrr/shhs1/";
 
 mannual_starting_point = 0;
 female_target_idx = (find((shhs1dataset.oahi < 5 & shhs1dataset.overall_shhs1 == 7 & shhs1dataset.gender == 2)));

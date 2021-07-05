@@ -4,7 +4,7 @@ clear; close all; clc;
 addpath(genpath("./edfread/"))
 
 % data_dir MUST include both PSG and Hypnogram file!
-data_dir = "data/path/";
+data_dir = "data/";
 
 tmp = struct2cell(dir(data_dir + "/*PSG.edf"));
 psg_n = tmp(1, :);
