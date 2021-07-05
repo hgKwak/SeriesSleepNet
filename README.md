@@ -1,7 +1,7 @@
 # SeriesSleepNet
 Minji Lee, Hyeong-Jin Kim, Heon-Gyu Kwak, Dong-Ok Won, and Seong-Whan Lee, "SeriesSleepNet: An EEG Time Series Model Using Temporal CNN with Bi-LSTM for Automatic Sleep Stage Scoring*.
 
-%<img src="/img/fig1.png" width="100%" height="100%"></img>
+<img src="/img/fig1_n.pdf" width="100%" height="100%"></img>
 
 ## How to run
 1. Download the Sleep-EDF and SHHS database
@@ -18,8 +18,7 @@ Minji Lee, Hyeong-Jin Kim, Heon-Gyu Kwak, Dong-Ok Won, and Seong-Whan Lee, "Seri
 2. Data pre-processing
    + Change directory to ```./SerieseSleepNet/pre-processing```
    + Unzip ```eeglab.zip```
-   + Run ```preprocessing.m```
-   + Run ```shhs_preprocessing.m```
+   + Run ```preprocessing.m```, ```shhs_preprocessing.m```, ```male_shhs_preprocessing.m```, ```female_shhs_preprocessing.m```
    
 3. Training and testing the SerieseSleepNet
    + Change directory to ```./SerieseSleepNet```
@@ -36,7 +35,6 @@ Minji Lee, Hyeong-Jin Kim, Heon-Gyu Kwak, Dong-Ok Won, and Seong-Whan Lee, "Seri
 
 ## Result:
 Hypnogram and posterior probability distribution with SerieseSleepNet for one subject of Sleep-EDF database
-<img src="/img/fig3.png" width="100%" height="100%"></img>
 
 ## Contact:
 + Minji Lee (Department of Brain and Cognitive Engineering, Korea University; minjilee@korea.ac.kr)
