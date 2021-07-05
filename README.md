@@ -15,17 +15,17 @@ Minji Lee, Hyeong-Jin Kim, Heon-Gyu Kwak, Dong-Ok Won, and Seong-Whan Lee, "Seri
 [SHHS]: https://sleepdata.org/datasets/shhs/
 
 2. Data pre-processing
-   + Change directory to ```./SerieseSleepNet/pre-processing```
-   + Place downloaded datasets in ```./SerieseSleepNet/pre-processing/data```
+   + Change directory to ```./SeriesSleepNet/pre-processing```
+   + Place downloaded datasets in ```./SeriesSleepNet/pre-processing/data```
   
-      * _i.e.)_ ```./SerieseSleepNet/pre-processing/data/shhs``` and ```./SerieseSleepNet/pre-processing/data/sleep-edf-database-expanded-1.0.0```
+      * _i.e.)_ ```./SeriesSleepNet/pre-processing/data/shhs``` and ```./SeriesSleepNet/pre-processing/data/sleep-edf-database-expanded-1.0.0```
    + Unzip ```eeglab.zip```
    + Run preprocessing files 
       
       * _i.e.)_ ```sleepedf_preprocessing.m```, ```shhs_preprocessing.m```, ```male_shhs_preprocessing.m```, and ```female_shhs_preprocessing.m``` files.
    
 3. Training and testing the SerieseSleepNet
-   + Change directory to ```./SerieseSleepNet```
+   + Change directory to ```./SeriesSleepNet```
    + Refer to ```example.txt``` to train and test SerieseSleepNet.
    
 ## Environment:
