@@ -138,17 +138,17 @@ if args.input_type == 'SHHS' or args.input_type == 'male_SHHS' or args.input_typ
 
 lstm = LSTM.LSTMClassifier(input_size, hidden_size, num_layers)
 
-cnn.load_state_dict(torch.load(args.parameter_dir + "cnn_IP({:s})_SL({:d}).pt"
-                               .format(args.model, args.input_type, args.seq_len, args.cv)))
-lstm.load_state_dict(torch.load(args.parameter_dir + "lstm_IP({:s})_SL({:d}).pt"
-                                .format(args.model, args.input_type, args.seq_len, args.cv)))
+cnn.load_state_dict(torch.load(args.parameter_dir + "cnn_IP({:s})_SL({:d})_CV({:d}).pt"
+                               .format(args.input_type, args.seq_len, args.cv)))
+lstm.load_state_dict(torch.load(args.parameter_dir + "lstm_IP({:s})_SL({:d})_CV({:d}).pt"
+                                .format(args.input_type, args.seq_len, args.cv)))
 
 test_loss_list = []
 
-flabel1 = open(args.out_dir + "label1_IP({:s})_SL({:d}).pt"
-               .format(args.model, args.input_type, args.seq_len, args.cv), 'w')
-flabel2 = open(args.out_dir + "label2_IP({:s})_SL({:d}).pt"
-               .format(args.model, args.input_type, args.seq_len, args.cv), 'w')
+flabel1 = open(args.out_dir + "label1_IP({:s})_SL({:d})_CV({:d}).pt"
+               .format(args.input_type, args.seq_len, args.cv), 'w')
+flabel2 = open(args.out_dir + "label2_IP({:s})_SL({:d})_CV({:d}).pt"
+               .format(args.input_type, args.seq_len, args.cv), 'w')
 
 with torch.no_grad():
     corr_num = 0
