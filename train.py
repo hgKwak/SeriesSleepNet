@@ -104,13 +104,12 @@ hyp_filelist = os.listdir(hyp_filepath)
 
 psg_train = []
 hyp_train = []
+psg_val = []
+hyp_val = []
 psg_test = []
 hyp_test = []
 
 if args.input_type == 'SHHS' or args.input_type == 'male_SHHS' or args.input_type == 'female_SHHS':
-    psg_val = []
-    hyp_val = []
-
     n_files = len(psg_filelist)
     n_train = round(n_files * 0.5)
     n_val = round(n_files * 0.3)
@@ -154,8 +153,8 @@ else:
         i = [2 * (args.cv - 1) - 1, 2 * (args.cv - 1)]
 
     for ii in i:
-        psg_test.append(preprocess_data(psg_filepath, psg_filelist[ii]))
-        hyp_test.append(load_header(hyp_filepath, hyp_filelist[ii]))
+        psg_val.append(preprocess_data(psg_filepath, psg_filelist[ii]))
+        hyp_val.append(load_header(hyp_filepath, hyp_filelist[ii]))
 
     if len(i) == 1:
         del psg_train[i[0]]
@@ -279,8 +278,8 @@ for epoch in tqdm(range(args.cnn_epoch)):
 
             if max_F1 < F1:
                 torch.save(cnn.state_dict(),
-                           args.out_dir + "cnn_IP({:s})_SL({:d}).pt"
-                           .format(args.model, args.input_type, args.seq_len, args.cv))
+                           args.out_dir + "cnn_IP({:s})_SL({:d})_CV({:d}).pt"
+                           .format(args.input_type, args.seq_len, args.cv))
                 max_F1 = F1
                 print("epoch: {}/{} | step: {}/{} | acc: {:.2f} | F1 score: {:.2f}"
                       .format(epoch + 1, args.cnn_epoch, i + 1, cnn_num_batches, acc * 100, F1 * 100))
@@ -315,7 +314,7 @@ acc_list = []
 f1_list = []
 epo_list = []
 cnn.load_state_dict(torch.load(
-    args.out_dir + "cnn_IP({:s})_SL({:d}).pt".format(args.model, args.input_type, args.seq_len, args.cv)))
+    args.out_dir + "cnn_IP({:s})_SL({:d})_CV({:d}).pt".format(args.input_type, args.seq_len, args.cv)))
 
 print('CNN stage is done, starting Bi-LSTM stage...')
 for epoch in tqdm(range(args.lstm_epoch)):
@@ -395,8 +394,8 @@ for epoch in tqdm(range(args.lstm_epoch)):
 
             if max_F1 < F1:
                 torch.save(lstm.state_dict(),
-                           args.out_dir + "lstm_IP({:s})_SL({:d}).pt"
-                           .format(args.model, args.input_type, args.seq_len, args.cv))
+                           args.out_dir + "lstm_IP({:s})_SL({:d})_CV({:d}).pt"
+                           .format(args.input_type, args.seq_len, args.cv))
                 print("epoch: {}/{} | step: {}/{} | acc: {:.2f} | F1 score: {:.2f}"
                       .format(epoch + 1, args.lstm_epoch, i + 1, rnn_num_batches, acc * 100, F1 * 100))
                 print(test_cf)
@@ -431,8 +430,8 @@ acc_list = []
 f1_list = []
 epo_list = []
 cnn.load_state_dict(torch.load(
-    args.out_dir + "cnn_IP({:s})_SL({:d}).pt"
-    .format(args.model, args.input_type, args.seq_len, args.cv)))
+    args.out_dir + "cnn_IP({:s})_SL({:d})_CV({:d}).pt"
+    .format(args.input_type, args.seq_len, args.cv)))
 
 for epoch in tqdm(range(args.lstm_epoch)):
     if chk == True:
@@ -512,8 +511,8 @@ for epoch in tqdm(range(args.lstm_epoch)):
             F1 = f1_score(corr_list, pred_list, average='macro')
 
             if max_F1 < F1:
-                torch.save(lstm.state_dict(), args.out_dir + "lstm_IP({:s})_SL({:d}).pt"
-                           .format(args.model, args.input_type, args.seq_len, args.cv))
+                torch.save(lstm.state_dict(), args.out_dir + "lstm_IP({:s})_SL({:d})_CV({:d}).pt"
+                           .format(args.input_type, args.seq_len, args.cv))
                 max_F1 = F1
                 print("epoch: {}/{} | step: {}/{} | acc: {:.2f} | F1 score: {:.2f}"
                       .format(epoch + 1, args.lstm_epoch, i + 1, rnn_num_batches, corr_num / total_num * 100, F1 * 100))
