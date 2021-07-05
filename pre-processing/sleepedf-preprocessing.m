@@ -4,7 +4,7 @@ clear; close all; clc;
 addpath(genpath("./edfread/"))
 
 % data_dir MUST include both PSG and Hypnogram file!
-data_dir = "data/";
+data_dir = "./data/sleep-edf-database-expanded-1.0.0/sleep-cassette/";
 
 tmp = struct2cell(dir(data_dir + "/*PSG.edf"));
 psg_n = tmp(1, :);
@@ -33,7 +33,7 @@ for i = 1:length(psg_n)
 end
 %% Pre-processing #4
 cd("./eeglab")
-eeglab
+eeglab;
 cd("..")
 psg_path = './SleepEDF/psg/';
 if(~exist(psg_path, 'dir'))
