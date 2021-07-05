@@ -32,7 +32,7 @@ parser.add_argument('--cnn_epoch', type=int, default=30,
                     help='epoch number of cnn')
 parser.add_argument('--lstm_epoch', type=int, default=15,
                     help='epoch number of lstm')
-parser.add_argument('--cv', type=int, default=1,
+parser.add_argument('--cv', type=int, default=20,
                     help='number of cross-validation')
 parser.add_argument('--gpu', type=int, default=0)
 
