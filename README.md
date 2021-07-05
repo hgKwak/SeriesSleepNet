@@ -31,7 +31,7 @@ Minji Lee, Hyeong-Jin Kim, Heon-Gyu Kwak, Dong-Ok Won, and Seong-Whan Lee, "Seri
    
 ## Environment:
 + Matlab R2019b
-+ Python3
++ Python 3.8
 + Pytorch v1.70
 + numpy v1.19.5
 + scipy v1.5.0
