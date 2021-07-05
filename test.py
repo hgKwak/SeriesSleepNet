@@ -117,7 +117,6 @@ else:
         i = [2 * (args.cv - 1), 2 * (args.cv - 1) + 1]
     elif args.cv > 14:
         i = [2 * (args.cv - 1) - 1, 2 * (args.cv - 1)]
-
     for ii in i:
         psg_test.append(preprocess_data(psg_filepath, psg_filelist[ii]))
         hyp_test.append(load_header(hyp_filepath, hyp_filelist[ii]))
@@ -143,7 +142,6 @@ cnn.load_state_dict(torch.load(args.parameter_dir + "cnn_IP({:s})_SL({:d})_CV({:
 lstm.load_state_dict(torch.load(args.parameter_dir + "lstm_IP({:s})_SL({:d})_CV({:d}).pt"
                                 .format(args.input_type, args.seq_len, args.cv)))
 
-test_loss_list = []
 
 flabel1 = open(args.out_dir + "label1_IP({:s})_SL({:d})_CV({:d}).pt"
                .format(args.input_type, args.seq_len, args.cv), 'w')

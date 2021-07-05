@@ -203,16 +203,11 @@ lstm = LSTM.LSTMClassifier(input_size, hidden_size, num_layers)
 optimizer2 = optim.Adam(lstm.parameters(), lr=args.lstm_lr, weight_decay=0.003)
 rnn_num_batches = len(trainDataloader2)
 
-train_loss_list = []
-
 acc = 0
 F1 = 0
 max_acc = 0
 max_F1 = 0
 
-acc_list = []
-f1_list = []
-epo_list = []
 for epoch in tqdm(range(args.cnn_epoch)):
     train_loss = 0.0
     pred_list_tr = []
@@ -269,7 +264,6 @@ for epoch in tqdm(range(args.cnn_epoch)):
 
             corr_list = np.array(np.concatenate(corr_list))
             pred_list = np.array(np.concatenate(pred_list))
-            train_loss_list.append(train_loss / 100)
             train_loss = 0.0
             test_cf = confusion_matrix(corr_list, pred_list)
 
@@ -301,18 +295,12 @@ for epoch in tqdm(range(args.cnn_epoch)):
           .format(epoch + 1, args.cnn_epoch, i + 1, cnn_num_batches, acc * 100, F1 * 100))
     print(train_cf)
     print(cf_F1)
-    acc_list.append(acc)
-    f1_list.append(F1)
-    epo_list.append(epoch + 1)
 
 train_cf = []
 acc = 0
 max_acc = 0
 max_acc = 0
 max_F1 = 0
-acc_list = []
-f1_list = []
-epo_list = []
 cnn.load_state_dict(torch.load(
     args.out_dir + "cnn_IP({:s})_SL({:d})_CV({:d}).pt".format(args.input_type, args.seq_len, args.cv)))
 
@@ -385,7 +373,6 @@ for epoch in tqdm(range(args.lstm_epoch)):
                         corr_list.extend(list(np.hstack(test_y.cpu())))
                         pred_list.extend(list(np.hstack(expected_test_y.cpu())))
 
-            train_loss_list.append(train_loss / 100)
             train_loss = 0.0
             test_cf = confusion_matrix(corr_list, pred_list)
 
@@ -416,125 +403,3 @@ for epoch in tqdm(range(args.lstm_epoch)):
           .format(epoch + 1, args.lstm_epoch, i + 1, rnn_num_batches, acc * 100, F1 * 100))
     print(train_cf)
     print(cf_F1)
-    acc_list.append(acc)
-    f1_list.append(F1)
-    epo_list.append(epoch + 1)
-
-
-train_cf = []
-acc = 0
-max_acc = 0
-max_acc = 0
-max_F1 = 0
-acc_list = []
-f1_list = []
-epo_list = []
-cnn.load_state_dict(torch.load(
-    args.out_dir + "cnn_IP({:s})_SL({:d})_CV({:d}).pt"
-    .format(args.input_type, args.seq_len, args.cv)))
-
-for epoch in tqdm(range(args.lstm_epoch)):
-    if chk == True:
-        epoch = check_point['epoch']
-        chk = False
-    train_loss = 0.0
-    pred_list_tr = []
-    corr_list_tr = []
-
-    for i, data in enumerate(trainDataloader2):
-        train_x, train_y = data
-        hidden, cell = lstm.init_hidden(train_x.shape[0])
-        train_x = train_x.squeeze().view(-1, 1, train_x.size(2), train_x.size(3))
-        train_y = train_y.squeeze().type(dtype=torch.int64)
-
-        if use_cuda:
-            train_x = train_x.cuda()
-            train_y = train_y.cuda()
-
-        optimizer2.zero_grad()
-        output = F.softmax(cnn(train_x, True), 1)
-        output = output.view(-1, args.seq_len, 5)
-        train_output = F.softmax(lstm(output, hidden, cell, args.seq_len), 1)
-        train_y = train_y.view(train_y.shape[0] * train_y.shape[1])
-        if epoch < args.lstm_epoch // 3:
-            train_l = criterion(train_output, train_y)
-        else:
-            train_l = criterion(train_output, train_y)
-
-        expected_train_y = train_output.argmax(dim=1)
-
-        train_l.backward()
-        optimizer2.step()
-        corr_list_tr.extend(list(np.hstack(train_y.cpu())))
-        pred_list_tr.extend(list(np.hstack(expected_train_y.cpu())))
-        train_loss += train_l.item()
-        del train_l
-        del train_output
-        del output
-        if (i + 1) % interval == 0:
-            with torch.no_grad():
-                corr_num = 0
-                total_num = 0
-                pred_list = []
-                corr_list = []
-
-                for j, x in enumerate(testLSTM.x_data):
-                    y = testLSTM.y_data[j]
-                    for jj, test_x in enumerate(x):
-                        hidden, cell = lstm.init_hidden(1)
-                        test_y = y[jj]
-                        test_x = torch.as_tensor(test_x)
-                        test_x = test_x.squeeze().view(test_x.size(0), -1, test_x.size(1), test_x.size(2))
-                        test_y = torch.as_tensor(test_y)
-                        test_y = test_y.type(dtype=torch.int64)
-
-                        if use_cuda:
-                            test_x = test_x.cuda()
-                            test_y = test_y.cuda()
-
-                        output = F.softmax(cnn(test_x, True), 1)
-                        test_output = F.softmax(lstm(output, hidden, cell, args.seq_len), 1)
-                        expected_test_y = test_output.argmax(dim=1)
-
-                        corr = test_y[test_y == expected_test_y].size(0)
-                        corr_num += corr
-
-                        total_num += test_y.size(0)
-                        corr_list.extend(list(np.hstack(test_y.cpu())))
-                        pred_list.extend(list(np.hstack(expected_test_y.cpu())))
-
-            train_loss_list.append(train_loss / 100)
-            train_loss = 0.0
-            test_cf = confusion_matrix(corr_list, pred_list)
-
-            acc = corr_num / total_num * 100
-            F1 = f1_score(corr_list, pred_list, average='macro')
-
-            if max_F1 < F1:
-                torch.save(lstm.state_dict(), args.out_dir + "lstm_IP({:s})_SL({:d})_CV({:d}).pt"
-                           .format(args.input_type, args.seq_len, args.cv))
-                max_F1 = F1
-                print("epoch: {}/{} | step: {}/{} | acc: {:.2f} | F1 score: {:.2f}"
-                      .format(epoch + 1, args.lstm_epoch, i + 1, rnn_num_batches, corr_num / total_num * 100, F1 * 100))
-                print(test_cf)
-
-            if max_acc < acc:
-                max_acc = acc
-
-    train_cf = confusion_matrix(corr_list_tr, pred_list_tr)
-    cf_F1 = []
-    for ii in range(5):
-        for jj in range(5):
-            cf_F1.append((2 * train_cf[ii][jj]) / (sum(train_cf[ii]) + sum(np.transpose(train_cf)[jj])))
-
-    cf_F1 = torch.tensor(cf_F1).reshape([5, 5])
-    if use_cuda:
-        cf_F1 = cf_F1.cuda()
-
-    print("epoch: {}/{} | step: {}/{} | acc: {:.2f} | F1 score: {:.2f}"
-          .format(epoch + 1, args.lstm_epoch, i + 1, rnn_num_batches, corr_num / total_num * 100,  F1 * 100))
-    print(train_cf)
-    print(cf_F1)
-    acc_list.append(corr_num / total_num)
-    f1_list.append(F1)
-    epo_list.append(epoch + 1)
