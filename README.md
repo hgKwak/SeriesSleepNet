@@ -1,7 +1,7 @@
 # SeriesSleepNet
 Minji Lee, Hyeong-Jin Kim, Heon-Gyu Kwak, Dong-Ok Won, and Seong-Whan Lee, "SeriesSleepNet: An EEG Time Series Model Using Temporal CNN with Bi-LSTM for Automatic Sleep Stage Scoring*.
 
-<img src="/img/fig1_n.pdf" width="100%" height="100%"></img>
+<img src="/img/fig1.png" width="100%" height="100%"></img>
 
 ## How to run
 1. Download the Sleep-EDF and SHHS database
