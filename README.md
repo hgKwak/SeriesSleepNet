@@ -39,9 +39,9 @@ Hypnogram and posterior probability distribution with SerieseSleepNet for one su
 <img src="/img/fig3.png" width="100%" height="100%"></img>
 
 ## Contact:
-Minji Lee (Department of Brain and Cognitive Engineering, Korea University; minjilee@korea.ac.kr)
-Hyeong-Jin Kim (Department of Brain and Cognitive Engineering, Korea University; kme0115@korea.ac.kr)
-Heon-Gyu Kwak (Department of Artificial Intelligence, Korea University; hg_kwak@korea.ac.kr)
++ Minji Lee (Department of Brain and Cognitive Engineering, Korea University; minjilee@korea.ac.kr)
++ Hyeong-Jin Kim (Department of Brain and Cognitive Engineering, Korea University; kme0115@korea.ac.kr)
++ Heon-Gyu Kwak (Department of Artificial Intelligence, Korea University; hg_kwak@korea.ac.kr)
 
 ## License:
 This project is released under the MIT License.
