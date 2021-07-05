@@ -37,9 +37,6 @@ Minji Lee, Hyeong-Jin Kim, Heon-Gyu Kwak, Dong-Ok Won, and Seong-Whan Lee, "Seri
 + scikit-learn v 0.24.2
 + tqdm v4.59.0
 
-## Result:
-Hypnogram and posterior probability distribution with SerieseSleepNet for one subject of Sleep-EDF database
-
 ## Contact:
 + Minji Lee (Department of Brain and Cognitive Engineering, Korea University; minjilee@korea.ac.kr)
 + Hyeong-Jin Kim (Department of Brain and Cognitive Engineering, Korea University; kme0115@korea.ac.kr)
