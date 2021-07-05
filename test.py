@@ -27,7 +27,7 @@ parser.add_argument('--cnn_lr', type=float, default=1e-5,
                     help='learning rate of cnn')
 parser.add_argument('--lstm_lr', type=float, default=1e-3,
                     help='learning rate of lstm')
-parser.add_argument('--cv', type=int, default=1,
+parser.add_argument('--cv', type=int, default=20,
                     help='number of cross-validation (1-20)')
 parser.add_argument('--gpu', type=int, default=0)
 args = parser.parse_args()
