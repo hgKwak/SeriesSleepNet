@@ -6,13 +6,11 @@ Minji Lee, Hyeong-Jin Kim, Heon-Gyu Kwak, Dong-Ok Won, and Seong-Whan Lee, "Seri
 ## How to run
 1. Download the Sleep-EDF and SHHS database
    + Sleep-EDF database is available [here][sleep-edf].   
-   **Note that, we used only 20 people of the Sleep Cassette data.**    
-   **_i.e.)_ from subject SC4001 to SC4192 in the sleep-cassette.**    
+      **Note that, we used only 20 people of the Sleep Cassette data.**    
+      **_i.e.)_ from subject SC4001 to SC4192 in the sleep-cassette.**    
+   + SHHS database is available [here][SHHS]. 
    
 [sleep-edf]: https://physionet.org/content/sleep-edfx/1.0.0/
-
-   + SHHS database is available [here][SHHS].   
-   
 [SHHS]: https://sleepdata.org/datasets/shhs/
 
 2. Data pre-processing
