@@ -19,6 +19,7 @@ class CNNClassifier(nn.Module):
             freq=channel-3
         pool2 = nn.MaxPool2d((1, 2))
         self.conv_module = nn.Sequential(conv1, nn.ReLU(), pool1, conv2, nn.ReLU(), conv3, nn.ReLU(), conv4, nn.ReLU(), pool2)
+
         if SHHS:
             fc1 = nn.Linear(freq * 40 * 553, 100)
         else:
