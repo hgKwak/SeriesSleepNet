@@ -16,7 +16,7 @@ Minji Lee, Hyeong-Jin Kim, Heon-Gyu Kwak, Dong-Ok Won, and Seong-Whan Lee, "Seri
 
 2. Data pre-processing
    + Change directory to ```./SerieseSleepNet/pre-processing```
-   + Place downloaded dataset folders in ```./SerieseSleepNet/pre-processing/data```
+   + Place downloaded datasets in ```./SerieseSleepNet/pre-processing/data```
   
       * _i.e.)_ ```./SerieseSleepNet/pre-processing/data/shhs``` and ```./SerieseSleepNet/pre-processing/data/sleep-edf-database-expanded-1.0.0```
    + Unzip ```eeglab.zip```
