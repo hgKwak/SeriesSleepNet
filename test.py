@@ -11,6 +11,7 @@ import pickle
 import network.cnn as CNN
 import network.lstm as LSTM
 import network.dataset as DS
+from torch.utils.data import DataLoader
 
 parser = argparse.ArgumentParser(description='Training CombSleepNet')
 parser.add_argument('--data_dir', type=str, default='./pre-processing/',
@@ -55,18 +56,19 @@ def load_header(path, filename):
     out = f.get('hyp')[0]
     return out
 
-def loss(model_output, true_label, cf):
+def loss(pred, true, cf):
     out = 0
-    for i, item in enumerate(model_output):
+    for i, item in enumerate(pred):
         item2 = torch.unsqueeze(item, 0)
-        t = torch.unsqueeze(true_label[i], 0)
-        if model_output[i].argmax() == true_label[i]:
+        t = torch.unsqueeze(true[i], 0)
+        if pred[i].argmax() == true[i]:
             w = 1
         else:
-            if cf[true_label[i]][model_output[i].argmax()] < 0.01:
+            print(cf[true[i]][pred[i].argmax()])
+            if cf[true[i]][pred[i].argmax()] < 0.01:
                 w = 1
             else:
-                w = 100 * cf[true_label[i]][model_output[i].argmax()]
+                w = 100 * cf[true[i]][pred[i].argmax()]
         out += w * F.cross_entropy(item2, t)
 
     return out
@@ -109,89 +111,94 @@ if args.input_type == 'SHHS' or args.input_type == 'male_SHHS' or args.input_typ
     for i in tqdm(test_list):
         psg_test.append(preprocess_data(psg_filepath, psg_filelist[i]))
         hyp_test.append(load_header(hyp_filepath, hyp_filelist[i]))
-
-else:
-    if args.cv == 14:
-        i = [26]
-    elif args.cv < 14:
-        i = [2 * (args.cv - 1), 2 * (args.cv - 1) + 1]
-    elif args.cv > 14:
-        i = [2 * (args.cv - 1) - 1, 2 * (args.cv - 1)]
-    for ii in i:
-        psg_test.append(preprocess_data(psg_filepath, psg_filelist[ii]))
-        hyp_test.append(load_header(hyp_filepath, hyp_filelist[ii]))
+    psg_test = np.concatenate(psg_test)
+    hyp_test = np.concatenate(hyp_test)
+print(psg_test.shape, hyp_test.shape)
+# else:
+#     if args.cv == 14:
+#         i = [26]
+#     elif args.cv < 14:
+#         i = [2 * (args.cv - 1), 2 * (args.cv - 1) + 1]
+#     elif args.cv > 14:
+#         i = [2 * (args.cv - 1) - 1, 2 * (args.cv - 1)]
+#     for ii in i:
+#         psg_test.append(preprocess_data(psg_filepath, psg_filelist[ii]))
+#         hyp_test.append(load_header(hyp_filepath, hyp_filelist[ii]))
 
 num_layers = 2
 hidden_size = 5
 input_size = 5
 
-testDataset1 = DS.CustomDataset(psg_test, hyp_test, False, True, args.seq_len)
 testDataset2 = DS.CustomDataset(psg_test, hyp_test, False, False, args.seq_len)
+testDataloader2 = DataLoader(testDataset2, batch_size=1, shuffle=False)
 
-criterion = nn.CrossEntropyLoss()
+criterion = nn.CrossEntropyLoss().cuda(args.gpu)
+n_channel = psg_test[0].shape[-2]
+# print(n_channel)
 
-n_channel = psg_test[0].shape[1]
-cnn = CNN.CNNClassifier(channel=n_channel)
+# cnn = CNN.CNNClassifier(channel=n_channel).cuda(args.gpu)
 if args.input_type == 'SHHS' or args.input_type == 'male_SHHS' or args.input_type == 'female_SHHS':
-    cnn = CNN.CNNClassifier(channel=n_channel, SHHS=True)
+    cnn = CNN.CNNClassifier(channel=n_channel, SHHS=True).cuda(args.gpu)
+lstm = LSTM.LSTMClassifier(input_size, hidden_size, num_layers).cuda(args.gpu)
 
-lstm = LSTM.LSTMClassifier(input_size, hidden_size, num_layers)
-
-cnn.load_state_dict(torch.load(args.parameter_dir + "cnn_IP({:s})_SL({:d})_CV({:d}).pt"
+cnn.load_state_dict(torch.load(args.parameter_dir + "cnn_IP({:s})_SL({:d}).pt"
                                .format(args.input_type, args.seq_len, args.cv)))
-lstm.load_state_dict(torch.load(args.parameter_dir + "lstm_IP({:s})_SL({:d})_CV({:d}).pt"
+lstm.load_state_dict(torch.load(args.parameter_dir + "lstm_IP({:s})_SL({:d}).pt"
                                 .format(args.input_type, args.seq_len, args.cv)))
 
 
-flabel1 = open(args.out_dir + "label1_IP({:s})_SL({:d})_CV({:d}).pt"
+flabel1 = open(args.out_dir + "label1_IP({:s})_SL({:d}).pt"
                .format(args.input_type, args.seq_len, args.cv), 'w')
-flabel2 = open(args.out_dir + "label2_IP({:s})_SL({:d})_CV({:d}).pt"
+flabel2 = open(args.out_dir + "label2_IP({:s})_SL({:d}).pt"
                .format(args.input_type, args.seq_len, args.cv), 'w')
+
+
 
 with torch.no_grad():
     corr_num = 0
     total_num = 0
     pred_list = []
     corr_list = []
+    hidden, cell = lstm.init_hidden(rnn_batch_size)
+    for j, data in tqdm(enumerate(testDataloader2)):
+        test_x, test_y = data
+        # print(test_x.shape, test_y.shape)
+        test_x = test_x.squeeze().view(-1, 1, test_x.size(-2), test_x.size(-1))
+        test_y = test_y.squeeze()
+        if use_cuda:
+            test_x = test_x.cuda(args.gpu)
+            test_y = test_y.cuda(args.gpu)
 
-    for j, x in tqdm(enumerate(testDataset2.x_data)):
-        y = testDataset2.y_data[j]
-        hidden, cell = lstm.init_hidden(1)
-        for jj, test_x in enumerate(x):
-            test_y = y[jj]
-            test_x = torch.as_tensor(test_x)
-            test_x = test_x.squeeze().view(test_x.size(0), 1, test_x.size(1), test_x.size(2))
-            test_y = torch.as_tensor(test_y)
-            test_y = test_y.type(dtype=torch.int64)
+        output = F.softmax(cnn(test_x, True), 1)
+        try:
+            output = output.view(1, args.seq_len, 5)
+        except:
+            output = output.view(1, -1, 5)
+        _, seq_len, _ = output.shape
+        test_output, (hidden, cell) = F.softmax(lstm(output, hidden, cell, seq_len), 1)
+        test_y = test_y.view(-1)
+        expected_test_y2 = test_output.argmax(dim=1)
 
-            if use_cuda:
-                test_x = test_x.cuda()
-                test_y = test_y.cuda()
+        corr = test_y[test_y == expected_test_y2].size(0)
+        corr_num += corr
 
-            output = F.softmax(cnn(test_x, True), 1)
-            test_output2 = F.softmax(lstm(output, hidden, cell, args.seq_len), 1)
-            expected_test_y2 = test_output2.argmax(dim=1)
+        total_num += test_y.size(0)
+        corr_list.extend(list(np.hstack(test_y.cpu())))
+        pred_list.extend(list(np.hstack(expected_test_y2.cpu())))
 
-            corr = test_y[test_y == expected_test_y2].size(0)
-            corr_num += corr
+        if j == 0:
+            for k in test_output:
+                for kk in k:
+                    flabel1.write(str(float(kk)))
+                    flabel1.write(" ")
+                flabel1.write(";")
+            flabel1.write("\n\n")
 
-            total_num += test_y.size(0)
-            corr_list.extend(list(np.hstack(test_y.cpu())))
-            pred_list.extend(list(np.hstack(expected_test_y2.cpu())))
-
-            if j == 0:
-                for k in test_output2:
-                    for kk in k:
-                        flabel1.write(str(float(kk)))
-                        flabel1.write(" ")
-                    flabel1.write(";")
-                flabel1.write("\n\n")
-
-            if j == 1:
-                for k in test_output2:
-                    for kk in k:
-                        flabel2.write(str(float(kk)))
-                        flabel2.write(" ")
+        if j == 1:
+            for k in test_output:
+                for kk in k:
+                    flabel2.write(str(float(kk)))
+                    flabel2.write(" ")
                     flabel2.write(";")
                 flabel2.write("\n\n")
 
@@ -204,7 +211,7 @@ for ii in range(5):
 
 cf_F1 = torch.tensor(cf_F1).reshape([5, 5])
 if use_cuda:
-    cf_F1 = cf_F1.cuda()
+    cf_F1 = cf_F1.cuda(args.gpu)
 acc = corr_num / total_num * 100
 F1 = (cf_F1[0][0] + cf_F1[1][1] + cf_F1[2][2] + cf_F1[3][3] + cf_F1[4][4]) / 5
 print("acc: {:.2f}".format(corr_num / total_num * 100))

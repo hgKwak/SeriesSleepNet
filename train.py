@@ -1,405 +1,653 @@
-import os
 import torch
-from scipy import io
 import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
-from torch.utils.data import DataLoader
-from sklearn.metrics import confusion_matrix, f1_score
 import numpy as np
-import math
-import argparse
-import pickle
+import os
+import datetime
 from tqdm import tqdm
-import network.cnn as CNN
-import network.lstm as LSTM
-import network.dataset as DS
+from sklearn.metrics import *
+import matplotlib.pyplot as plt
 
-parser = argparse.ArgumentParser(description='Training CombSleepNet')
-parser.add_argument('--data_dir', type=str, default="./pre-processing/",
-                    help='pre-processed data dir')
-parser.add_argument('--input_type', type=str,
-                    help='SleepEDF, SHHS, male_SHHS, female_SHHS', default='SleepEDF')
-parser.add_argument('--out_dir', type=str, default='./parameter/',
-                    help='path where to save the parameters')
-parser.add_argument('--seq_len', type=int, default=20,
-                    help='sequence length (default: 20)')
-parser.add_argument('--cnn_lr', type=float, default=1e-5,
-                    help='learning rate of cnn')
-parser.add_argument('--lstm_lr', type=float, default=1e-3,
-                    help='learning rate of lstm')
-parser.add_argument('--cnn_epoch', type=int, default=30,
-                    help='epoch number of cnn')
-parser.add_argument('--lstm_epoch', type=int, default=15,
-                    help='epoch number of lstm')
-parser.add_argument('--cv', type=int, default=20,
-                    help='number of cross-validation')
-parser.add_argument('--gpu', type=int, default=0)
+def cnn_train(cv_idx, train_loader, val_loader, criterion, cnn_model, cnn_opt, args, settings):
+    Acc, Kappa = [], []
+    W_f1, R_f1, N1_f1, N2_f1, N3_f1, N4_f1, Mean = [], [], [], [], [], [], []
+    perfsum = 0
 
-args = parser.parse_args()
+    for epoch in range(args.cnn_epoch):
+        pred_list_tr = []
+        true_list_tr = []
+        t_loss = 0
+        print('Epoch', epoch + 1)
+        for idx, data in enumerate(tqdm(train_loader)):
+            cnn_model.train()
+            train_x, train_y = data
+            train_x = train_x.unsqueeze(1).permute(0, 2, 1, 3).contiguous()
+            b, _, s, _ = train_x.shape
+            train_y = train_y.long()
+            if settings['use_cuda']:
+                train_x = train_x.cuda()
+                train_y = train_y.cuda()
 
-if not os.path.exists(args.out_dir):
-    os.mkdir(args.out_dir)
-
-GPU_NUM = args.gpu
-device = 'cuda:{:d}'.format(GPU_NUM)
-torch.cuda.set_device(device)
-print('Current device ', torch.cuda.current_device())  # check
-use_cuda = device
-print(torch.cuda.get_device_name(device))
-print('Memory Usage:')
-print('Allocated:', round(torch.cuda.memory_allocated(device) / 1024 ** 3, 1), 'GB')
-
-def preprocess_data(path, filename):
-    f = io.loadmat(path + filename)
-    out = f.get('psg')
-    return out
-
-def load_header(path, filename):
-    f = io.loadmat(path + filename)
-    out = f.get('hyp')[0]
-    return out
-
-def loss(model_output, true_label, cf):
-    out = 0
-    for i, item in enumerate(model_output):
-        item2 = torch.unsqueeze(item, 0)
-        t = torch.unsqueeze(true_label[i], 0)
-        if model_output[i].argmax() == true_label[i]:
-            w = 1
-        else:
-            if cf[true_label[i]][model_output[i].argmax()] < 0.01:
-                w = 1
+            cnn_opt.zero_grad()
+            train_output = cnn_model(train_x, pretrain=True)
+            train_y = train_y
+            if (epoch < args.cnn_epoch // 3 or args.default_ce):
+                train_l = criterion(train_output.view(-1, settings['n_classes']), train_y.view(-1))
             else:
-                w = 100 * cf[true_label[i]][model_output[i].argmax()]
-        out += w * F.cross_entropy(item2, t)
-    return out
+                train_l = criterion(train_output.view(-1, settings['n_classes']), train_y.view(-1), f1_confusion)
+            t_loss += train_l.item()
+            train_l.backward()
+            cnn_opt.step()
 
-if args.input_type == 'SleepEDF':
-    _psg = 'SleepEDF/psg/'
-    _hyp = 'SleepEDF/hyp/'
+            expected_train_y = torch.argmax(torch.softmax(train_output, dim=-1), dim=-1)
+            true_list_tr.append(train_y.view(-1).detach().cpu().numpy())
+            pred_list_tr.append(expected_train_y.view(-1).detach().cpu().numpy())
+        true_list_tr = np.array(np.concatenate(true_list_tr))
+        pred_list_tr = np.array(np.concatenate(pred_list_tr))
 
-elif args.input_type == 'SHHS':
-    _psg = 'SHHS/psg/'
-    _hyp = 'SHHS/hyp/'
-    args.cv = 1
+        t_acc = accuracy_score(true_list_tr, pred_list_tr)
+        t_f1 = f1_score(true_list_tr, pred_list_tr, average='macro')
+        t_kappa = cohen_kappa_score(true_list_tr, pred_list_tr)
+        t_confusion = confusion_matrix(true_list_tr, pred_list_tr)
+        try:
+            t_cls_rpt = classification_report(true_list_tr, pred_list_tr, zero_division=0,
+                                              target_names=['W', 'N1', 'N2', 'N3', 'R'], output_dict=True)
+        except:
+            t_cls_rpt = classification_report(true_list_tr, pred_list_tr, zero_division=0,
+                                              target_names=['W', 'N1', 'N2', 'N3', 'N4', 'R'], output_dict=True)
 
-elif args.input_type == 'male_SHHS':
-    _psg = 'male_SHHS/psg/'
-    _hyp = 'male_SHHS/hyp/'
-    args.cv = 1
+        t_loss = t_loss / (idx + 1)
+        print("[CV {} CNN Train] epoch: {}/{} | Acc.: {:.4f} | "
+              "F1 score: {:.4f} | kappa: {:.4f} | loss:{:.4f}"
+              .format(cv_idx, epoch + 1, args.cnn_epoch, t_acc, t_f1, t_kappa, t_loss))
 
-elif args.input_type == 'female_SHHS':
-    _psg = 'female_SHHS/psg/'
-    _hyp = 'female_SHHS/hyp/'
-    args.cv = 1
+        with torch.no_grad():
+            pred_list = []
+            true_list = []
 
+            cnn_model.eval()
+            for j, valid_data in enumerate(val_loader):
+                valid_x, valid_y = valid_data
+                s, c, _ = valid_x.shape
+                valid_x = valid_x.unsqueeze(0).permute(0, 2, 1, 3).contiguous()
+                b, _, s, _ = valid_x.shape
 
-path = args.data_dir
-psg_filepath = path + _psg
-hyp_filepath = path + _hyp
+                if settings['use_cuda']:
+                    valid_x = valid_x.cuda()
+                    valid_y = valid_y.cuda()
 
-psg_filelist = os.listdir(psg_filepath)
-hyp_filelist = os.listdir(hyp_filepath)
+                valid_output = cnn_model(valid_x, b)
+                expected_valid_y = torch.argmax(torch.softmax(valid_output, dim=-1), dim=-1)
+                true_list.append(valid_y.view(-1).detach().cpu().numpy())
+                pred_list.append(expected_valid_y.view(-1).detach().cpu().numpy())
 
-psg_train = []
-hyp_train = []
-psg_val = []
-hyp_val = []
-psg_test = []
-hyp_test = []
+        true_list = np.array(np.concatenate(true_list))
+        pred_list = np.array(np.concatenate(pred_list))
 
-if args.input_type == 'SHHS' or args.input_type == 'male_SHHS' or args.input_type == 'female_SHHS':
-    n_files = len(psg_filelist)
-    n_train = round(n_files * 0.5)
-    n_val = round(n_files * 0.3)
-    n_test = round(n_files * 0.2)
-    if n_train + n_val + n_test > n_files:
-        while n_train + n_val + n_test != n_files:
-            n_train = n_train - 1
-    elif n_train + n_val + n_test < n_files:
-        while n_train + n_val + n_test != n_files:
-            n_train = n_train + 1
-    print('Total number of dataset: {:d}'.format(n_files))
-    print('Number of training set: {:d}, validation set: {:d}, test set: {:d}'.format(n_train, n_val, n_test))
-    number_list = [x for x in range(n_files)]
-    train = number_list[0: n_train]
-    val = number_list[n_train: (n_train + n_val)]
-    test = number_list[(n_train + n_val):]
-    print('Loading training dataset...')
-    for i in tqdm(train):
-        psg_train.append(preprocess_data(psg_filepath, psg_filelist[i]))
-        hyp_train.append(load_header(hyp_filepath, hyp_filelist[i]))
-    print('Loading validation dataset...')
-    for i in tqdm(val):
-        psg_val.append(preprocess_data(psg_filepath, psg_filelist[i]))
-        hyp_val.append(load_header(hyp_filepath, hyp_filelist[i]))
-    print('Data loading completed')
-    for i in tqdm(test):
-        psg_test.append(preprocess_data(psg_filepath, psg_filelist[i]))
-        hyp_test.append(load_header(hyp_filepath, hyp_filelist[i]))
-    print('Loading test dataset...')
+        acc = accuracy_score(true_list, pred_list)
+        F1 = f1_score(true_list, pred_list, average='macro', zero_division=0)
+        kappa = cohen_kappa_score(true_list, pred_list)
+        if perfsum < (acc + F1 + kappa):
+            best_cnn = cnn_model.state_dict()
+            torch.save(cnn_model.state_dict(),
+                       settings['output_path'] + "param/cnn_IP({:s})_SL({:d})_cv{}.pt"
+                       .format(args.input_type, args.seq_len, cv_idx))
+            perfsum = acc + F1 + kappa
 
-else:
-    for i in range(len(psg_filelist)):
-        psg_train.append(preprocess_data(psg_filepath, psg_filelist[i]))
-        hyp_train.append(load_header(hyp_filepath, hyp_filelist[i]))
+        f1_confusion = []
+        f1_confusion.append(t_cls_rpt['W']['f1-score'])
+        f1_confusion.append(t_cls_rpt['N1']['f1-score'])
+        f1_confusion.append(t_cls_rpt['N2']['f1-score'])
+        f1_confusion.append(t_cls_rpt['N3']['f1-score'])
+        try:
+            f1_confusion.append(t_cls_rpt['N4']['f1-score'])
+        except:
+            pass
+        f1_confusion.append(t_cls_rpt['R']['f1-score'])
+        # for ii in range(settings['n_classes']):
+        #     for jj in range(settings['n_classes']):
+        #         factor = 2 * t_confusion[ii][jj] / (sum(t_confusion[ii]) + sum(np.transpose(t_confusion)[jj]))
+        #         if factor == 0:
+        #             factor = 1e-5
+        #         f1_confusion.append(factor)
+        #
+        # f1_confusion = torch.tensor(f1_confusion).view([settings['n_classes'], settings['n_classes']])
+        # if settings['use_cuda']:
+        #     f1_confusion = f1_confusion.cuda()
+        print("[CV {} CNN Valid] epoch: {}/{} | Acc.: {:.4f} | "
+              "F1 score: {:.4f} | kappa: {:.4f}"
+              .format(cv_idx, epoch + 1, args.cnn_epoch, acc, F1, kappa))
+        try:
+            print(classification_report(true_list, pred_list, zero_division=0, target_names=['W', 'N1', 'N2', 'N3', 'R']))
+            cls_rpt = classification_report(true_list, pred_list, zero_division=0,
+                                            target_names=['W', 'N1', 'N2', 'N3', 'R'], output_dict=True)
+        except:
+            print(classification_report(true_list, pred_list, zero_division=0, target_names=['W', 'N1', 'N2', 'N3', 'N4', 'R']))
+            cls_rpt = classification_report(true_list, pred_list, zero_division=0,
+                                            target_names=['W', 'N1', 'N2', 'N3', 'N4', 'R'], output_dict=True)
 
-    if args.cv == 14:
-        i = [26]
-    elif args.cv < 14:
-        i = [2 * (args.cv - 1), 2 * (args.cv - 1) + 1]
-    elif args.cv > 14:
-        i = [2 * (args.cv - 1) - 1, 2 * (args.cv - 1)]
+        W_f1.append(cls_rpt['W']['f1-score'])
+        N1_f1.append(cls_rpt['N1']['f1-score'])
+        N2_f1.append(cls_rpt['N2']['f1-score'])
+        N3_f1.append(cls_rpt['N3']['f1-score'])
+        try:
+            N4_f1.append(cls_rpt['N4']['f1-score'])
+        except:
+            pass
+        R_f1.append(cls_rpt['R']['f1-score'])
+        Mean.append(F1)
+        Acc.append(acc)
+        Kappa.append(kappa)
+    x_axis = [i + 1 for i in range(args.cnn_epoch)]
+    plt.plot(x_axis, W_f1, marker='s', label='W')
+    plt.plot(x_axis, R_f1, marker='s', label='R')
+    plt.plot(x_axis, N1_f1, marker='s', label='N1')
+    plt.plot(x_axis, N2_f1, marker='s', label='N2')
+    plt.plot(x_axis, N3_f1, marker='s', label='N3')
+    try:
+        plt.plot(x_axis, N4_f1, marker='s', label='N4')
+    except:
+        pass
+    plt.plot(x_axis, Mean, marker='s', label='Mean')
+    plt.legend(loc='lower right')
+    plt.xlabel('Training epoch')
+    plt.ylabel('Classwise F1')
+    plt.ylim(0, 1)
+    plt.savefig(settings['output_path'] + 'cv{}_cnn_classwise_f1.png'.format(cv_idx))
+    plt.close('all')
 
-    for ii in i:
-        psg_val.append(preprocess_data(psg_filepath, psg_filelist[ii]))
-        hyp_val.append(load_header(hyp_filepath, hyp_filelist[ii]))
+    return best_cnn
 
-    if len(i) == 1:
-        del psg_train[i[0]]
-        del hyp_train[i[0]]
+def lstm_train(cv_idx, train_loader, val_loader, criterion,
+               cnn_model, lstm_model, lstm_opt, args, settings):
+    W_f1, R_f1, N1_f1, N2_f1, N3_f1, N4_f1, Mean = [], [], [], [], [], [], []
+    Acc, Kappa = [], []
+    perfsum = 0
+
+    for epoch in range(args.lstm_epoch):
+        t_loss = 0
+        pred_list_tr = []
+        true_list_tr = []
+        print('Epoch', epoch + 1)
+
+        for idx, data in enumerate(tqdm(train_loader)):
+            cnn_model.eval()
+            lstm_model.train()
+            train_x, train_y = data
+            b, s, c, _ = train_x.shape
+            train_x = train_x.permute(0, 2, 1, 3).contiguous()
+            b, c, s, _ = train_x.shape
+            train_y = train_y.long().view(-1)
+            if settings['use_cuda']:
+                train_x = train_x.cuda()
+                train_y = train_y.cuda()
+
+            state = lstm_model.init_hidden(b)
+            lstm_opt.zero_grad()
+            in_feature = cnn_model(train_x)
+            train_output = lstm_model(in_feature, state, dense_connect=not args.no_dense_lstm)
+            train_output = train_output.view(-1, settings['n_classes'])
+
+            if (epoch < args.lstm_epoch // 3 or args.default_ce):
+                train_l = criterion(train_output, train_y)
+            else:
+                train_l = criterion(train_output, train_y, f1_confusion)
+            t_loss += train_l.item()
+            train_l.backward()
+            lstm_opt.step()
+            expected_train_y = torch.argmax(torch.softmax(train_output, dim=-1), dim=-1)
+            true_list_tr.append(train_y.view(-1).detach().cpu().numpy())
+            pred_list_tr.append(expected_train_y.view(-1).detach().cpu().numpy())
+
+        true_list_tr = np.concatenate(true_list_tr)
+        pred_list_tr = np.concatenate(pred_list_tr)
+        t_confusion = confusion_matrix(true_list_tr, pred_list_tr)
+        t_acc = accuracy_score(true_list_tr, pred_list_tr)
+        t_f1 = f1_score(true_list_tr, pred_list_tr, average='macro')
+        t_kappa = cohen_kappa_score(true_list_tr, pred_list_tr)
+        try:
+            t_cls_rpt = classification_report(true_list_tr, pred_list_tr, zero_division=0,
+                                              target_names=['W', 'N1', 'N2', 'N3', 'R'], output_dict=True)
+        except:
+            t_cls_rpt = classification_report(true_list_tr, pred_list_tr, zero_division=0,
+                                              target_names=['W', 'N1', 'N2', 'N3', 'N4', 'R'], output_dict=True)
+
+        t_loss = t_loss / (idx + 1)
+        print("[CV {} LSTM Train] epoch: {}/{} | Acc.: {:.4f} | "
+              "F1 score: {:.4f} | kappa: {:.4f} | loss:{:.4f}"
+              .format(cv_idx, epoch + 1, args.lstm_epoch, t_acc, t_f1, t_kappa, t_loss))
+
+        with torch.no_grad():
+            pred_list = []
+            true_list = []
+
+            cnn_model.eval()
+            lstm_model.eval()
+            for j, valid_data in enumerate(val_loader):
+                valid_x, valid_y = valid_data
+                s, c, _ = valid_x.shape
+                valid_x = valid_x.unsqueeze(0).permute(0, 2, 1, 3).contiguous()
+                b, _, s, _ = valid_x.shape
+
+                if settings['use_cuda']:
+                    valid_x = valid_x.cuda()
+                    valid_y = valid_y.cuda()
+
+                state = lstm_model.init_hidden(b)
+                in_feature = cnn_model(valid_x)
+                valid_output = lstm_model(in_feature, state, dense_connect=not args.no_dense_lstm)
+                expected_valid_y = torch.argmax(torch.softmax(valid_output, dim=-1), dim=-1)
+                true_list.append(valid_y.view(-1).detach().cpu().numpy())
+                pred_list.append(expected_valid_y.view(-1).detach().cpu().numpy())
+
+        true_list = np.concatenate(true_list)
+        pred_list = np.concatenate(pred_list)
+
+        acc = accuracy_score(true_list, pred_list)
+        F1 = f1_score(true_list, pred_list, average='macro', zero_division=0)
+        kappa = cohen_kappa_score(true_list, pred_list)
+
+        if perfsum < (acc + F1 + kappa):
+            best_lstm = lstm_model.state_dict()
+            torch.save(lstm_model.state_dict(),
+                       settings['output_path'] + "param/lstm_IP({:s})_SL({:d})_cv{}.pt"
+                       .format(args.input_type, args.seq_len, cv_idx))
+            perfsum = acc + F1 + kappa
+
+        f1_confusion = []
+        f1_confusion.append(t_cls_rpt['W']['f1-score'])
+        f1_confusion.append(t_cls_rpt['N1']['f1-score'])
+        f1_confusion.append(t_cls_rpt['N2']['f1-score'])
+        f1_confusion.append(t_cls_rpt['N3']['f1-score'])
+        try:
+            f1_confusion.append(t_cls_rpt['N4']['f1-score'])
+        except:
+            pass
+        f1_confusion.append(t_cls_rpt['R']['f1-score'])
+
+        # for ii in range(settings['n_classes']):
+        #     for jj in range(settings['n_classes']):
+        #         factor = 2 * t_confusion[ii][jj] / (sum(t_confusion[ii]) + sum(np.transpose(t_confusion)[jj]))
+        #         if factor == 0:
+        #             factor = 1e-5
+        #         f1_confusion.append(factor)
+
+        # f1_confusion = torch.tensor(f1_confusion).view([settings['n_classes'], settings['n_classes']])
+        # if settings['use_cuda']:
+        #     f1_confusion = f1_confusion.cuda()
+        print("[CV {} LSTM Valid] epoch: {}/{} | Acc.: {:.4f} | "
+              "F1 score: {:.4f} | kappa: {:.4f}"
+              .format(cv_idx, epoch + 1, args.lstm_epoch, acc, F1, kappa))
+        try:
+            print(classification_report(true_list, pred_list, zero_division=0, target_names=['W', 'N1', 'N2', 'N3', 'R']))
+            cls_rpt = classification_report(true_list, pred_list, zero_division=0,
+                                            target_names=['W', 'N1', 'N2', 'N3', 'R'], output_dict=True)
+        except:
+            print(classification_report(true_list, pred_list, zero_division=0, target_names=['W', 'N1', 'N2', 'N3', 'N4', 'R']))
+            cls_rpt = classification_report(true_list, pred_list, zero_division=0,
+                                            target_names=['W', 'N1', 'N2', 'N3', 'N4', 'R'], output_dict=True)
+
+        W_f1.append(cls_rpt['W']['f1-score'])
+        N1_f1.append(cls_rpt['N1']['f1-score'])
+        N2_f1.append(cls_rpt['N2']['f1-score'])
+        N3_f1.append(cls_rpt['N3']['f1-score'])
+        try:
+            N4_f1.append(cls_rpt['N4']['f1-score'])
+        except:
+            pass
+        R_f1.append(cls_rpt['R']['f1-score'])
+        Mean.append(F1)
+        Acc.append(acc)
+        Kappa.append(kappa)
+    x_axis = [i + 1 for i in range(args.lstm_epoch)]
+    plt.plot(x_axis, W_f1, marker='s', label='W')
+    plt.plot(x_axis, R_f1, marker='s', label='R')
+    plt.plot(x_axis, N1_f1, marker='s', label='N1')
+    plt.plot(x_axis, N2_f1, marker='s', label='N2')
+    plt.plot(x_axis, N3_f1, marker='s', label='N3')
+    try:
+        plt.plot(x_axis, N4_f1, marker='s', label='N4')
+    except:
+        pass
+    plt.plot(x_axis, Mean, marker='s', label='Mean')
+    plt.legend(loc='lower right')
+    plt.xlabel('Training epoch')
+    plt.ylabel('Classwise F1')
+    plt.ylim(0, 1)
+    plt.savefig(settings['output_path'] + 'cv{}_lstm_classwise_f1.png'.format(cv_idx))
+    plt.close('all')
+
+    return best_lstm
+
+def test(cnn_model, lstm_model, test_loader, args, settings):
+    performance = {}
+    all_pred = []
+    all_corr = []
+
+    if args.cnn_only:
+        cnn_model.eval()
+        with torch.no_grad():
+            pred_list = []
+            true_list = []
+            for j, test_data in enumerate(test_loader):
+                test_x, test_y = test_data
+                test_x = test_x.unsqueeze(1).permute(0, 2, 1, 3).contiguous()
+                b, _, s, _ = test_x.shape
+                test_y = test_y.long()
+
+                if settings['use_cuda']:
+                    test_x = test_x.cuda()
+                    test_y = test_y.cuda()
+
+                test_output = cnn_model(test_x, pretrain=True)
+                expected_test_y = torch.argmax(torch.softmax(test_output, dim=-1), dim=-1)
+                true_list.append(test_y.view(-1).detach().cpu().numpy())
+                pred_list.append(expected_test_y.view(-1).detach().cpu().numpy())
+
     else:
-        del psg_train[i[0]:i[1] + 1]
-        del hyp_train[i[0]:i[1] + 1]
+        cnn_model.eval()
+        lstm_model.eval()
+        with torch.no_grad():
+            pred_list = []
+            true_list = []
+            cnn_pred_list = []
+            for j, test_data in enumerate(test_loader):
+                test_x, test_y = test_data
+                s, c, _ = test_x.shape
+                test_x = test_x.unsqueeze(0).permute(0, 2, 1, 3).contiguous()
+                b, _, s, _ = test_x.shape
+                test_y = test_y.long()
 
-num_layers = 2
-cnn_batch_size = 64
-rnn_batch_size = 16
-hidden_size = 5
-input_size = 5
+                if settings['use_cuda']:
+                    test_x = test_x.cuda()
+                    test_y = test_y.cuda()
 
-trainCNN = DS.CustomDataset(psg_train, hyp_train, True, True, args.seq_len)
-trainLSTM = DS.CustomDataset(psg_train, hyp_train, True, False, args.seq_len)
+                state = lstm_model.init_hidden(1)
+                in_feature = cnn_model(test_x)
+                cnn_res = cnn_model(test_x, pretrain=True)
+                test_output = lstm_model(in_feature, state, dense_connect=not args.no_dense_lstm)
+                expected_test_y = torch.argmax(torch.softmax(test_output, dim=-1), dim=-1)
+                expected_cnn_test_y = torch.argmax(torch.softmax(cnn_res, dim=-1), dim=-1)
+                true_list.append(test_y.view(-1).detach().cpu().numpy())
+                cnn_pred_list.append(expected_cnn_test_y.view(-1).detach().cpu().numpy())
+                pred_list.append(expected_test_y.view(-1).detach().cpu().numpy())
 
-if args.input_type == 'SHHS' or args.input_type == 'male_SHHS' or args.input_type == 'female_SHHS':
-    testCNN = DS.CustomDataset(psg_val, hyp_val, False, True, args.seq_len)
-    testLSTM = DS.CustomDataset(psg_val, hyp_val, False, False, args.seq_len)
-    with open('{:s}_testset.pickle'.format(args.input_type), 'wb') as f:
-        pickle.dump(test, f, pickle.HIGHEST_PROTOCOL)
-        print("Saved indices for test dataset list as '{:s}_'testset.pickle'...".format(args.input_type))
+    true_list = np.concatenate(true_list)
+    pred_list = np.concatenate(pred_list)
+    all_corr.append(true_list)
+    all_pred.append(pred_list)
+    acc = accuracy_score(true_list, pred_list)
+    F1 = f1_score(true_list, pred_list, average='macro', zero_division=0)
+    kappa = cohen_kappa_score(true_list, pred_list)
+    test_confusion = confusion_matrix(true_list, pred_list)
+    performance['acc'] = acc
+    performance['F1'] = F1
+    performance['kappa'] = kappa
 
-else:
-    testCNN = DS.CustomDataset(psg_val, hyp_val, False, True, args.seq_len)
-    testLSTM = DS.CustomDataset(psg_val, hyp_val, False, False, args.seq_len)
+    return performance, test_confusion, true_list, pred_list
 
-test_dataset = DS.CustomDataset(psg_test, hyp_test, False, False, args.seq_len)
+def prepare_training(args):
+    if args.cnn_only:
+        args.comment = args.comment + 'cnnonly_'
+    if args.default_ce:
+        args.comment = args.comment + 'defaultce_'
+    if args.no_data_aug:
+        args.comment = args.comment + 'noaug_'
+    if args.no_dense_lstm:
+        args.comment = args.comment + 'nodense_'
+    if args.input_type == 'R&K':
+        args.comment = args.comment + 'R&K_'
 
-trainDataloader1 = DataLoader(trainCNN, batch_size=cnn_batch_size, shuffle=True)
-trainDataloader2 = DataLoader(trainLSTM, batch_size=rnn_batch_size, shuffle=True)
-n_channel = psg_train[0].shape[1]
-print("Input type: {:s}".format(args.input_type))
-print('Number of frequencies:', n_channel)
+    if not os.path.exists(args.out_dir):
+        os.mkdir(args.out_dir)
+    GPU_NUM = args.gpu
+    device = 'cuda:{:d}'.format(GPU_NUM) if torch.cuda.is_available() else 'cpu'
+    torch.cuda.set_device(device)
+    print('Current device ', torch.cuda.current_device())  # check
+    use_cuda = device
+    print(torch.cuda.get_device_name(device))
+    print('Memory Usage:')
+    print('Allocated:', round(torch.cuda.memory_allocated(device) / 1024 ** 3, 1), 'GB')
 
-cnn = CNN.CNNClassifier(channel=n_channel)
-if args.input_type == 'SHHS' or args.input_type == 'male_SHHS' or args.input_type == 'female_SHHS':
-    cnn = CNN.CNNClassifier(channel=n_channel, SHHS=True)
+    print('\nInput type: {}'.format(args.input_type))
+    print('Sequence length: {}'.format(args.seq_len))
+    print('CNN learning rate: {}'.format(args.cnn_lr))
+    print('CNN weight decay: {}'.format(args.cnn_wd))
+    print('CNN batch size: {}'.format(args.cnn_batch_size))
 
-criterion = nn.CrossEntropyLoss()
-optimizer1 = optim.Adam(cnn.parameters(), lr=args.cnn_lr, weight_decay=0.003)
-cnn_num_batches = len(trainDataloader1)
-interval = cnn_num_batches // 10
-lstm = LSTM.LSTMClassifier(input_size, hidden_size, num_layers)
-optimizer2 = optim.Adam(lstm.parameters(), lr=args.lstm_lr, weight_decay=0.003)
-rnn_num_batches = len(trainDataloader2)
+    if not args.cnn_only:
+        print('LSTM learning rate: {}'.format(args.lstm_lr))
+        print('LSTM weight decay: {}'.format(args.lstm_wd))
+        print('LSTM batch size: {}'.format(args.lstm_batch_size))
 
-acc = 0
-F1 = 0
-max_acc = 0
-max_F1 = 0
+    if args.default_ce:
+        print('Loss function: Cross entropy')
+    else:
+        print('Loss function: Weighted cross entropy')
 
-for epoch in tqdm(range(args.cnn_epoch)):
-    train_loss = 0.0
-    pred_list_tr = []
-    corr_list_tr = []
+    if not args.cnn_only:
+        print('Partial data augmentation:', not args.no_data_aug)
+        print('Dense LSTM:', not args.no_dense_lstm)
+    else:
+        print('Using CNN only')
 
-    for i, data in enumerate(trainDataloader1):
-        train_x, train_y = data
-        train_x = train_x.view(train_x.size(0), 1, train_x.size(1), train_x.size(2))
-        train_y = train_y.type(dtype=torch.int64)
+    now = datetime.datetime.now()
+    output_path = './output/{}.{}.{}_{}.{}.{}_input({})_sl({})_clr{}_llr{}_cwd{}_lwd{}_{}_SEED{}/'.format(
+        now.strftime('%Y'), now.strftime('%m'), now.strftime('%d'),
+        now.strftime('%H'), now.strftime('%M'), now.strftime('%S'),
+        args.input_type, args.seq_len, args.cnn_lr, args.lstm_lr, args.cnn_wd, args.lstm_wd, args.comment, args.seed)
 
-        if use_cuda:
+    if not os.path.exists(output_path):
+        os.mkdir(output_path)
+    if not os.path.exists(output_path + '/param/'):
+        os.mkdir(output_path + '/param/')
+
+    settings = {}
+    settings['output_path'] = output_path
+    settings['use_cuda'] = use_cuda
+
+    return settings
+
+def base_train(cv_idx, train_loader, val_loader, criterion, model, opt, scheduler, epoch):
+    perfsum = 0
+
+    for e in range(epoch):
+        pred_list_tr = []
+        true_list_tr = []
+        t_loss = 0
+        print('Epoch', e + 1)
+        for idx, data in enumerate(tqdm(train_loader)):
+            model.train()
+            train_x, train_y = data
+            train_x = train_x.unsqueeze(1).permute(0, 2, 1, 3).contiguous()
+            b, _, s, _ = train_x.shape
+            train_y = train_y.long()
             train_x = train_x.cuda()
             train_y = train_y.cuda()
 
-        optimizer1.zero_grad()
-        train_output = F.softmax(cnn(train_x, True), 1)
+            opt.zero_grad()
+            train_output = model(train_x)
+            train_y = train_y
+            train_l = criterion(train_output.view(-1, 5), train_y.view(-1))
+            t_loss += train_l.item()
+            train_l.backward()
+            opt.step()
+            scheduler.step()
 
-        if epoch < 1:
-            train_l = criterion(train_output, train_y)
-        else:
-            train_l = criterion(train_output, train_y)
-        expected_train_y = train_output.argmax(dim=1)
-        train_l.backward()
-        optimizer1.step()
+            expected_train_y = torch.argmax(torch.softmax(train_output, dim=-1), dim=-1)
+            true_list_tr.append(train_y.view(-1).detach().cpu().numpy())
+            pred_list_tr.append(expected_train_y.view(-1).detach().cpu().numpy())
+        true_list_tr = np.array(np.concatenate(true_list_tr))
+        pred_list_tr = np.array(np.concatenate(pred_list_tr))
 
-        corr_list_tr.extend(list(np.hstack(train_y.cpu())))
-        pred_list_tr.extend(list(np.hstack(expected_train_y.cpu())))
+        t_acc = accuracy_score(true_list_tr, pred_list_tr)
+        t_f1 = f1_score(true_list_tr, pred_list_tr, average='macro')
+        t_kappa = cohen_kappa_score(true_list_tr, pred_list_tr)
 
-        train_loss += train_l.item()
-        del train_l
-        del train_output
+        t_loss = t_loss / (idx + 1)
+        print("[CV {} Model Train] epoch: {}/{} | Acc.: {:.4f} | "
+              "F1 score: {:.4f} | kappa: {:.4f} | loss:{:.4f}"
+              .format(cv_idx, e + 1, epoch, t_acc, t_f1, t_kappa, t_loss))
 
-        if (i + 1) % interval == 0:
-            with torch.no_grad():
-                corr_num = 0
-                total_num = 0
-                pred_list = []
-                corr_list = []
+        with torch.no_grad():
+            pred_list = []
+            true_list = []
 
-                for j, test_x in enumerate(testCNN.x_data):
-                    test_y = testCNN.y_data[j]
-                    test_x = torch.as_tensor(test_x)
-                    test_x = test_x.view(test_x.size(0), 1, 1, -1)
-                    test_y = torch.as_tensor(test_y)
-                    test_y = test_y.type(dtype=torch.int64)
+            model.eval()
+            for j, valid_data in enumerate(val_loader):
+                valid_x, valid_y = valid_data
+                valid_x = valid_x.unsqueeze(1).permute(0, 2, 1, 3).contiguous()
+                b, _, s, _ = valid_x.shape
+                valid_y = valid_y.long()
 
-                    if use_cuda:
-                        test_x = test_x.cuda()
-                        test_y = test_y.cuda()
-                    test_output = F.softmax(cnn(test_x, True), 1)
-                    expected_test_y = test_output.argmax(dim=1)
-                    corr_list.append(test_y.view(-1).detach().cpu().numpy())
-                    pred_list.append(expected_test_y.view(-1).detach().cpu().numpy())
+                valid_x = valid_x.cuda()
+                valid_y = valid_y.cuda()
 
-            corr_list = np.array(np.concatenate(corr_list))
-            pred_list = np.array(np.concatenate(pred_list))
-            train_loss = 0.0
-            test_cf = confusion_matrix(corr_list, pred_list)
+                valid_output = model(valid_x)
+                expected_valid_y = torch.argmax(torch.softmax(valid_output, dim=-1), dim=-1)
+                true_list.append(valid_y.view(-1).detach().cpu().numpy())
+                pred_list.append(expected_valid_y.view(-1).detach().cpu().numpy())
 
-            acc = int(sum(pred_list == corr_list)) / len(corr_list)
-            F1 = f1_score(corr_list, pred_list, average='macro')
+        true_list = np.array(np.concatenate(true_list))
+        pred_list = np.array(np.concatenate(pred_list))
 
-            if max_F1 < F1:
-                torch.save(cnn.state_dict(),
-                           args.out_dir + "cnn_IP({:s})_SL({:d})_CV({:d}).pt"
-                           .format(args.input_type, args.seq_len, args.cv))
-                max_F1 = F1
-                print("epoch: {}/{} | step: {}/{} | acc: {:.2f} | F1 score: {:.2f}"
-                      .format(epoch + 1, args.cnn_epoch, i + 1, cnn_num_batches, acc * 100, F1 * 100))
-                print(test_cf)
-            if max_acc < acc:
-                max_acc = acc
+        acc = accuracy_score(true_list, pred_list)
+        F1 = f1_score(true_list, pred_list, average='macro', zero_division=0)
+        kappa = cohen_kappa_score(true_list, pred_list)
+        if perfsum < (acc + F1 + kappa):
+            best_model = model.state_dict()
+            perfsum = acc + F1 + kappa
 
-    train_cf = confusion_matrix(corr_list_tr, pred_list_tr)
-    cf_F1 = []
-    for ii in range(5):
-        for jj in range(5):
-            cf_F1.append((2 * train_cf[ii][jj]) / (sum(train_cf[ii]) + sum(np.transpose(train_cf)[jj])))
+        print("[CV {} Model Valid] epoch: {}/{} | Acc.: {:.4f} | "
+              "F1 score: {:.4f} | kappa: {:.4f}"
+              .format(cv_idx, e + 1, epoch, acc, F1, kappa))
+        print(classification_report(true_list, pred_list, zero_division=0, target_names=['W', 'N1', 'N2', 'N3', 'R']))
 
-    cf_F1 = torch.tensor(cf_F1).reshape([5, 5])
-    if use_cuda:
-        cf_F1 = cf_F1.cuda()
+    return best_model
 
-    print("epoch: {}/{} | step: {}/{} | acc: {:.2f} | F1 score: {:.2f}"
-          .format(epoch + 1, args.cnn_epoch, i + 1, cnn_num_batches, acc * 100, F1 * 100))
-    print(train_cf)
-    print(cf_F1)
+def base_train_lstm(cv_idx, train_loader, val_loader, criterion,
+               model, opt, scheduler, epoch, seq_len=23):
+    perfsum = 0
 
-train_cf = []
-acc = 0
-max_acc = 0
-max_acc = 0
-max_F1 = 0
-cnn.load_state_dict(torch.load(
-    args.out_dir + "cnn_IP({:s})_SL({:d})_CV({:d}).pt".format(args.input_type, args.seq_len, args.cv)))
+    for e in range(epoch):
+        t_loss = 0
+        pred_list_tr = []
+        true_list_tr = []
+        print('Epoch', e + 1)
 
-print('CNN stage is done, starting Bi-LSTM stage...')
-for epoch in tqdm(range(args.lstm_epoch)):
-    print('Epoch:', epoch)
-    train_loss = 0.0
-    pred_list_tr = []
-    corr_list_tr = []
-    for i, data in enumerate(trainDataloader2):
-        train_x, train_y = data
-        hidden, cell = lstm.init_hidden(train_x.shape[0])
-        train_x = train_x.squeeze().view(-1, 1, train_x.size(2), train_x.size(3))
-        train_y = train_y.squeeze().type(dtype=torch.int64)
+        for idx, data in enumerate(tqdm(train_loader)):
+            model.train()
+            train_x, train_y = data
+            # print(train_x.shape)
+            bs, c, _ = train_x.shape
+            try:
+                train_x = train_x.view(bs // seq_len, seq_len, c, _).permute(0, 2, 1, 3).contiguous()
+            except:
+                train_x = train_x.view(1, -1, c, _).permute(0, 2, 1, 3).contiguous()
+            b, c, s, _ = train_x.shape
+            train_y = train_y.long()
 
-        if use_cuda:
             train_x = train_x.cuda()
             train_y = train_y.cuda()
 
-        optimizer2.zero_grad()
-        output = F.softmax(cnn(train_x, True), 1)
-        output = output.view(-1, args.seq_len, 5)
-        train_output = F.softmax(lstm(output, hidden, cell, args.seq_len), 1)
-        train_y = train_y.view(train_y.shape[0] * train_y.shape[1])
-        if epoch < args.lstm_epoch // 3:
-            train_l = criterion(train_output, train_y)
-        else:
-            train_l = criterion(train_output, train_y)
+            opt.zero_grad()
+            train_output = model(train_x)
 
-        expected_train_y = train_output.argmax(dim=1)
+            train_l = criterion(train_output.view(-1, 5), train_y.view(-1))
+            t_loss += train_l.item()
+            train_l.backward()
+            opt.step()
+            scheduler.step()
+            expected_train_y = torch.argmax(torch.softmax(train_output, dim=-1), dim=-1)
+            true_list_tr.append(train_y.view(-1).detach().cpu().numpy())
+            pred_list_tr.append(expected_train_y.view(-1).detach().cpu().numpy())
 
-        train_l.backward()
-        optimizer2.step()
-        corr_list_tr.extend(list(np.hstack(train_y.cpu())))
-        pred_list_tr.extend(list(np.hstack(expected_train_y.cpu())))
-        train_loss += train_l.item()
-        del train_l
-        del train_output
-        del output
+        true_list_tr = np.concatenate(true_list_tr)
+        pred_list_tr = np.concatenate(pred_list_tr)
 
-        if (i + 1) % interval == 0:
-            with torch.no_grad():
-                corr_num = 0
-                total_num = 0
-                pred_list = []
-                corr_list = []
+        t_acc = accuracy_score(true_list_tr, pred_list_tr)
+        t_f1 = f1_score(true_list_tr, pred_list_tr, average='macro')
+        t_kappa = cohen_kappa_score(true_list_tr, pred_list_tr)
 
-                for j, x in enumerate(testLSTM.x_data):
-                    y = testLSTM.y_data[j]
-                    for jj, test_x in enumerate(x):
-                        hidden, cell = lstm.init_hidden(1)
-                        test_y = y[jj]
-                        test_x = torch.as_tensor(test_x)
-                        test_x = test_x.squeeze().view(test_x.size(0), -1, test_x.size(1), test_x.size(2))
-                        test_y = torch.as_tensor(test_y)
-                        test_y = test_y.type(dtype=torch.int64)
+        t_loss = t_loss / (idx + 1)
+        print("[CV {} LSTM Train] epoch: {}/{} | Acc.: {:.4f} | "
+              "F1 score: {:.4f} | kappa: {:.4f} | loss:{:.4f}"
+              .format(cv_idx, e + 1, epoch, t_acc, t_f1, t_kappa, t_loss))
 
-                        if use_cuda:
-                            test_x = test_x.cuda()
-                            test_y = test_y.cuda()
+        with torch.no_grad():
+            pred_list = []
+            true_list = []
 
-                        output = F.softmax(cnn(test_x, True), 1)
-                        test_output = F.softmax(lstm(output, hidden, cell, args.seq_len), 1)
-                        expected_test_y = test_output.argmax(dim=1)
+            model.eval()
+            for j, valid_data in enumerate(val_loader):
+                valid_x, valid_y = valid_data
+                try:
+                    bs, c, _ = valid_x.shape
+                    valid_x = valid_x.view(bs, seq_len, c, _).permute(0, 2, 1, 3).contiguous()
+                except:
+                    valid_x = valid_x.view(1, -1, c, _).permute(0, 2, 1, 3).contiguous()
+                valid_y = valid_y.long()
+                b, c, s, _ = valid_x.shape
 
-                        corr = test_y[test_y == expected_test_y].size(0)
-                        corr_num += corr
+                valid_x = valid_x.cuda()
+                valid_y = valid_y.cuda()
 
-                        total_num += test_y.size(0)
-                        corr_list.extend(list(np.hstack(test_y.cpu())))
-                        pred_list.extend(list(np.hstack(expected_test_y.cpu())))
+                valid_output = model(valid_x)
+                expected_valid_y = torch.argmax(torch.softmax(valid_output, dim=-1), dim=-1)
+                true_list.append(valid_y.view(-1).detach().cpu().numpy())
+                pred_list.append(expected_valid_y.view(-1).detach().cpu().numpy())
 
-            train_loss = 0.0
-            test_cf = confusion_matrix(corr_list, pred_list)
+        true_list = np.concatenate(true_list)
+        pred_list = np.concatenate(pred_list)
 
-            acc = corr_num / total_num
-            F1 = f1_score(corr_list, pred_list, average='macro')
+        acc = accuracy_score(true_list, pred_list)
+        F1 = f1_score(true_list, pred_list, average='macro', zero_division=0)
+        kappa = cohen_kappa_score(true_list, pred_list)
 
-            if max_F1 < F1:
-                torch.save(lstm.state_dict(),
-                           args.out_dir + "lstm_IP({:s})_SL({:d})_CV({:d}).pt"
-                           .format(args.input_type, args.seq_len, args.cv))
-                print("epoch: {}/{} | step: {}/{} | acc: {:.2f} | F1 score: {:.2f}"
-                      .format(epoch + 1, args.lstm_epoch, i + 1, rnn_num_batches, acc * 100, F1 * 100))
-                print(test_cf)
-            if max_acc < acc:
-                max_acc = acc
+        if perfsum < (acc + F1 + kappa):
+            best_model = model.state_dict()
+            perfsum = acc + F1 + kappa
 
-    train_cf = confusion_matrix(corr_list_tr, pred_list_tr)
-    cf_F1 = []
-    for ii in range(5):
-        for jj in range(5):
-            cf_F1.append((2 * train_cf[ii][jj]) / (sum(train_cf[ii]) + sum(np.transpose(train_cf)[jj])))
+        print("[CV {} Model Valid] epoch: {}/{} | Acc.: {:.4f} | "
+              "F1 score: {:.4f} | kappa: {:.4f}"
+              .format(cv_idx, e + 1, epoch, acc, F1, kappa))
+        print(classification_report(true_list, pred_list, zero_division=0, target_names=['W', 'N1', 'N2', 'N3', 'R']))
 
-    cf_F1 = torch.tensor(cf_F1).reshape([5, 5])
-    if use_cuda:
-        cf_F1 = cf_F1.cuda()
+    return best_model
 
-    print("epoch: {}/{} | step: {}/{} | acc: {:.2f} | F1 score: {:.2f}"
-          .format(epoch + 1, args.lstm_epoch, i + 1, rnn_num_batches, acc * 100, F1 * 100))
-    print(train_cf)
-    print(cf_F1)
+
+def base_test(model, test_loader):
+    performance = {}
+    all_pred = []
+    all_corr = []
+
+    model.eval()
+    with torch.no_grad():
+        pred_list = []
+        true_list = []
+        for j, test_data in enumerate(test_loader):
+            test_x, test_y = test_data
+            test_x = test_x.unsqueeze(1).permute(0, 2, 1, 3).contiguous()
+            b, _, s, _ = test_x.shape
+            test_y = test_y.long()
+
+            test_x = test_x.cuda()
+            test_y = test_y.cuda()
+
+            test_output = model(test_x)
+            expected_test_y = torch.argmax(torch.softmax(test_output, dim=-1), dim=-1)
+            true_list.append(test_y.view(-1).detach().cpu().numpy())
+            pred_list.append(expected_test_y.view(-1).detach().cpu().numpy())
+
+    true_list = np.concatenate(true_list)
+    pred_list = np.concatenate(pred_list)
+    all_corr.append(true_list)
+    all_pred.append(pred_list)
+    acc = accuracy_score(true_list, pred_list)
+    F1 = f1_score(true_list, pred_list, average='macro', zero_division=0)
+    kappa = cohen_kappa_score(true_list, pred_list)
+    test_confusion = confusion_matrix(true_list, pred_list)
+    performance['acc'] = acc
+    performance['F1'] = F1
+    performance['kappa'] = kappa
+
+    return performance, test_confusion, true_list, pred_list
