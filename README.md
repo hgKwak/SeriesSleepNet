@@ -1,7 +1,9 @@
 # SeriesSleepNet
-Minji Lee, Hyeong-Jin Kim, Heon-Gyu Kwak, Dong-Ok Won, and Seong-Whan Lee, "SeriesSleepNet: An EEG Time Series Model Using Temporal CNN with Bi-LSTM for Automatic Sleep Stage Scoring*.
+Minji Lee, Heon-Gyu Kwak, Hyeong-Jin Kim, Dong-Ok Won, Ki-Young Jung, and Seong-Whan Lee, "SeriesSleepNet: An EEG Time Series Model with
+Partial Data Augmentation Using Single-Channel
+EEG for Automatic Sleep Stage Scoring*.
 
-<img src="/img/architecture.pdf" width="100%" height="100%"></img>
+<img src="/img/architecture.png" width="100%" height="100%"></img>
 
 ## How to run
 1. Download the Sleep-EDF and SHHS database
@@ -13,9 +15,9 @@ Minji Lee, Hyeong-Jin Kim, Heon-Gyu Kwak, Dong-Ok Won, and Seong-Whan Lee, "Seri
 [SHHS]: https://sleepdata.org/datasets/shhs/
 
 2. Data pre-processing
-    + Place downloaded datasets in ```./SeriesSleepNet/data/raw/``` and change the ```data_dir``` argument value in ```prepare_physionet.py (for Sleep-EDF dataset)``` and ```prepare_shhs.py (for SHHS dataset)``` files, according to your local settings.    
+    + Place downloaded datasets in ```./SeriesSleepNet/data/raw/``` and change the ```data_dir``` argument value in ```prepare_physionet.py``` and ```prepare_shhs.py``` files, according to your local settings.    
     + Run preprocessing files 
-	* _i.e.)_ ```prepare_physionet.py (for Sleep-EDF dataset)```, ```prepare_shhs.py (for SHHS dataset)```,    
+	** _i.e.)_ ```prepare_physionet.py (for Sleep-EDF dataset)```, ```prepare_shhs.py (for SHHS dataset)```,    
 3. Training and testing the SerieseSleepNet
    + Change directory to ```./SeriesSleepNet```
    + Run main.py file
