@@ -6,8 +6,9 @@ from tqdm import tqdm
 from sklearn.metrics import *
 
 def cnn_train(cv_idx, train_loader, val_loader, criterion, cnn_model, cnn_opt, args, settings):
-    Acc, Kappa = [], []
+    Acc, Kappa, Mean = [], [], []
     perfsum = 0
+
     for epoch in range(args.cnn_epoch):
         pred_list_tr = []
         true_list_tr = []
@@ -43,9 +44,8 @@ def cnn_train(cv_idx, train_loader, val_loader, criterion, cnn_model, cnn_opt, a
         t_acc = accuracy_score(true_list_tr, pred_list_tr)
         t_f1 = f1_score(true_list_tr, pred_list_tr, average='macro')
         t_kappa = cohen_kappa_score(true_list_tr, pred_list_tr)
-        t_confusion = confusion_matrix(true_list_tr, pred_list_tr)
         t_cls_rpt = classification_report(true_list_tr, pred_list_tr, zero_division=0,
-                                        target_names=['W', 'N1', 'N2', 'N3', 'R'], output_dict=True)
+                                          target_names=['W', 'N1', 'N2', 'N3', 'R'], output_dict=True)
 
         t_loss = t_loss / (idx + 1)
         print("[CV {} CNN Train] epoch: {}/{} | Acc.: {:.4f} | "
@@ -96,6 +96,8 @@ def cnn_train(cv_idx, train_loader, val_loader, criterion, cnn_model, cnn_opt, a
               "F1 score: {:.4f} | kappa: {:.4f}"
               .format(cv_idx, epoch + 1, args.cnn_epoch, acc, F1, kappa))
         print(classification_report(true_list, pred_list, zero_division=0, target_names=['W', 'N1', 'N2', 'N3', 'R']))
+
+        Mean.append(F1)
         Acc.append(acc)
         Kappa.append(kappa)
 
@@ -103,8 +105,9 @@ def cnn_train(cv_idx, train_loader, val_loader, criterion, cnn_model, cnn_opt, a
 
 def lstm_train(cv_idx, train_loader, val_loader, criterion,
                cnn_model, lstm_model, lstm_opt, args, settings):
-    Acc, Kappa = [], []
+    Acc, Kappa, Mean = [], [], []
     perfsum = 0
+
     for epoch in range(args.lstm_epoch):
         t_loss = 0
         pred_list_tr = []
@@ -142,7 +145,6 @@ def lstm_train(cv_idx, train_loader, val_loader, criterion,
 
         true_list_tr = np.concatenate(true_list_tr)
         pred_list_tr = np.concatenate(pred_list_tr)
-        t_confusion = confusion_matrix(true_list_tr, pred_list_tr)
         t_acc = accuracy_score(true_list_tr, pred_list_tr)
         t_f1 = f1_score(true_list_tr, pred_list_tr, average='macro')
         t_kappa = cohen_kappa_score(true_list_tr, pred_list_tr)
@@ -202,10 +204,11 @@ def lstm_train(cv_idx, train_loader, val_loader, criterion,
               "F1 score: {:.4f} | kappa: {:.4f}"
               .format(cv_idx, epoch + 1, args.lstm_epoch, acc, F1, kappa))
         print(classification_report(true_list, pred_list, zero_division=0, target_names=['W', 'N1', 'N2', 'N3', 'R']))
-        cls_rpt = classification_report(true_list, pred_list, zero_division=0,
-                                        target_names=['W', 'N1', 'N2', 'N3', 'R'], output_dict=True)
+
+        Mean.append(F1)
         Acc.append(acc)
         Kappa.append(kappa)
+
     return best_lstm
 
 def test(cnn_model, lstm_model, test_loader, args, settings):
@@ -255,25 +258,17 @@ def test(cnn_model, lstm_model, test_loader, args, settings):
     return performance, test_confusion, true_list, pred_list
 
 def prepare_training(args):
-    if not os.path.exists(args.out_dir):
-        os.mkdir(args.out_dir)
     GPU_NUM = args.gpu
     device = 'cuda:{:d}'.format(GPU_NUM) if torch.cuda.is_available() else 'cpu'
     torch.cuda.set_device(device)
-    print('Current device ', torch.cuda.current_device())  # check
+    print('Current device ', torch.cuda.current_device())
     use_cuda = device
     print(torch.cuda.get_device_name(device))
-
     print('\nInput type: {}'.format(args.input_type))
     print('Sequence length: {}'.format(args.seq_len))
-
     print('CNN learning rate: {}'.format(args.cnn_lr))
     print('CNN weight decay: {}'.format(args.cnn_wd))
     print('CNN batch size: {}'.format(args.cnn_batch_size))
-
-    print('LSTM learning rate: {}'.format(args.lstm_lr))
-    print('LSTM weight decay: {}'.format(args.lstm_wd))
-    print('LSTM batch size: {}'.format(args.lstm_batch_size))
 
     now = datetime.datetime.now()
     output_path = './output/{}.{}.{}_{}.{}.{}_input({})_sl({})_clr{}_llr{}_cwd{}_lwd{}/'.format(

@@ -1,8 +1,3 @@
-'''
-This file is from the implementation code of AttnSleep paper,
-https://github.com/akaraspt/AttnSleep
-'''
-
 import os
 import numpy as np
 
@@ -29,11 +24,11 @@ EPOCH_SEC_SIZE = 30
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data_dir", type=str, default="./data/raw/shhs/polysomnography/edfs/shhs1",
+    parser.add_argument("--data_dir", type=str, default="./data/shhs/polysomnography/edfs/shhs1",
                         help="File path to the PSG files.")
-    parser.add_argument("--ann_dir", type=str, default="./data/raw/shhs/polysomnography/annotations-events-profusion/shhs1",
+    parser.add_argument("--ann_dir", type=str, default="./data/shhs/polysomnography/annotations-events-profusion/shhs1",
                         help="File path to the annotation files.")
-    parser.add_argument("--output_dir", type=str, default="./data/SHHS",
+    parser.add_argument("--output_dir", type=str, default="./data_processed/output_npz/shhs",
                         help="Directory where to save numpy files outputs.")
     parser.add_argument("--select_ch", type=str, default="EEG C4-A1",
                         help="The selected channel")

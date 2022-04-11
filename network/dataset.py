@@ -45,7 +45,6 @@ class LSTMDataset(Dataset):
                 pass
         x = torch.cat(x_list)
         y = torch.cat(y_list)
-
         self.x_data = x
         self.y_data = y
 
