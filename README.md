@@ -17,7 +17,9 @@ EEG for Automatic Sleep Stage Scoring*.
 2. Data pre-processing
     + Place downloaded datasets in ```./SeriesSleepNet/data/raw/``` and change the ```data_dir``` argument value in ```prepare_physionet.py``` and ```prepare_shhs.py``` files, according to your local settings.    
     + Run preprocessing files.
+
 	**_i.e.)_ ```prepare_physionet.py (for Sleep-EDF dataset)``` and ```prepare_shhs.py (for SHHS dataset)```.**
+
 3. Training and testing the SerieseSleepNet
    + Change directory to ```./SeriesSleepNet```
    + Run main.py file
@@ -28,6 +30,7 @@ EEG for Automatic Sleep Stage Scoring*.
 + numpy v1.22.2
 + scikit-learn v 0.24.2
 + tqdm v4.62.1
++ mne v0.21.0
 
 ## Contact:
 + Minji Lee (Department of Brain and Cognitive Engineering, Korea University; minjilee@korea.ac.kr)

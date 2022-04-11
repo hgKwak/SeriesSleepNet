@@ -37,8 +37,6 @@ parser.add_argument('-g', '--gamma', type=float, default=3)
 parser.add_argument('-k', '--k', type=int, default=10)
 args = parser.parse_args()
 
-np.random.seed(2022)
-torch.manual_seed(2022)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
