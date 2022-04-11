@@ -16,8 +16,8 @@ EEG for Automatic Sleep Stage Scoring*.
 
 2. Data pre-processing
     + Place downloaded datasets in ```./SeriesSleepNet/data/raw/``` and change the ```data_dir``` argument value in ```prepare_physionet.py``` and ```prepare_shhs.py``` files, according to your local settings.    
-    + Run preprocessing files 
-	** _i.e.)_ ```prepare_physionet.py (for Sleep-EDF dataset)```, ```prepare_shhs.py (for SHHS dataset)```,    
+    + Run preprocessing files.
+	** _i.e.)_ ```prepare_physionet.py (for Sleep-EDF dataset)```, ```prepare_shhs.py (for SHHS dataset)``` **
 3. Training and testing the SerieseSleepNet
    + Change directory to ```./SeriesSleepNet```
    + Run main.py file
