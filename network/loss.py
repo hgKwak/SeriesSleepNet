@@ -35,10 +35,9 @@ class Weighted_LablesSmoothing_Loss(nn.modules.loss._WeightedLoss):
             w = torch.pow(1 -(torch.log(cf) / torch.log(torch.tensor(self.k))).float(), self.gamma).to(device=log_prob.device)
             w.require_grad = False
             loss = true_one_hot * -log_prob.to(device=log_prob.device) * weight * w
-            loss = loss.sum(-1)
 
         if self.reduction == 'sum':
-            loss = loss
+            loss = loss.sum()
         elif self.reduction == 'mean':
             loss = loss.mean()
         return loss
