@@ -266,9 +266,18 @@ def prepare_training(args):
     print(torch.cuda.get_device_name(device))
     print('\nInput type: {}'.format(args.input_type))
     print('Sequence length: {}'.format(args.seq_len))
+
     print('CNN learning rate: {}'.format(args.cnn_lr))
     print('CNN weight decay: {}'.format(args.cnn_wd))
     print('CNN batch size: {}'.format(args.cnn_batch_size))
+
+    print('LSTM learning rate: {}'.format(args.lstm_lr))
+    print('LSTM weight decay: {}'.format(args.lstm_wd))
+    print('LSTM batch size: {}'.format(args.lstm_batch_size))
+
+    print('Alpha for label smoothing: {}'.format(args.alpha))
+    print('K for adaptive loss: {}'.format(args.k))
+    print('Gamma for adaptive loss: {}'.format(args.gamma))
 
     now = datetime.datetime.now()
     output_path = './output/{}.{}.{}_{}.{}.{}_input({})_sl({})_clr{}_llr{}_cwd{}_lwd{}/'.format(
@@ -276,6 +285,8 @@ def prepare_training(args):
         now.strftime('%H'), now.strftime('%M'), now.strftime('%S'),
         args.input_type, args.seq_len, args.cnn_lr, args.lstm_lr, args.cnn_wd, args.lstm_wd)
 
+    if not os.path.exists('./output/'):
+        os.mkdir('./output/')
     if not os.path.exists(output_path):
         os.mkdir(output_path)
     if not os.path.exists(output_path + '/param/'):
