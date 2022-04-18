@@ -102,16 +102,16 @@ if __name__ == '__main__':
               .format(cv_idx, performance['acc'], performance['F1'], performance['kappa']))
         print(classification_report(true_list, pred_list))
         print(test_confusion)
-        print('[Mean CV] Acc.: {:.4f} | F1 score: {:.4f} | Kappa: {:.4f}'
-              .format(cv_mean_acc, cv_mean_f1, cv_mean_kappa))
+        print('[Total Performance until CV {}] Acc.: {:.4f} | F1 score: {:.4f} | Kappa: {:.4f}'
+              .format(cv_idx, cv_mean_acc, cv_mean_f1, cv_mean_kappa))
 
         with open(settings['output_path'] + 'Result.txt', 'a') as f:
             f.write('\n[CV {}] Acc.: {:.4f} | F1 score: {:.4f} | Kappa: {:.4f}\n'
               .format(cv_idx, performance['acc'], performance['F1'], performance['kappa']))
             f.write(classification_report(true_list, pred_list))
             f.write(str(test_confusion))
-            f.write('\n[Mean CV] Acc.: {:.4f} | F1 score: {:.4f} | Kappa: {:.4f}\n'
-              .format(cv_mean_acc, cv_mean_f1, cv_mean_kappa))
+            f.write('\n[Total Performance until CV {}] Acc.: {:.4f} | F1 score: {:.4f} | Kappa: {:.4f}\n'
+              .format(cv_idx, cv_mean_acc, cv_mean_f1, cv_mean_kappa))
             f.close()
 
     print('******* CV completed *******')
@@ -123,13 +123,13 @@ if __name__ == '__main__':
     kappa = cohen_kappa_score(all_corr, all_pred)
     print(classification_report(all_corr, all_pred, zero_division=0, target_names=['W', 'N1', 'N2', 'N3', 'R']))
     print(confusion_matrix(all_corr, all_pred))
-    print('[Mean CV performance] Acc.: {:.4f} | F1 score: {:.4f} | Kappa: {:.4f}'
+    print('[Total Performance] Acc.: {:.4f} | F1 score: {:.4f} | Kappa: {:.4f}'
           .format(acc, F1, kappa))
 
     sys.stdout = open(settings['output_path'] + 'Result.txt', 'a')
     print('******* CV completed *******')
     print(classification_report(all_corr, all_pred, zero_division=0, target_names=['W', 'N1', 'N2', 'N3', 'R']))
     print(confusion_matrix(all_corr, all_pred))
-    print('[Mean CV performance] Acc.: {:.4f} | F1 score: {:.4f} | Kappa: {:.4f}'
+    print('[Total Performance] Acc.: {:.4f} | F1 score: {:.4f} | Kappa: {:.4f}'
           .format(acc, F1, kappa))
     sys.stdout.close()
