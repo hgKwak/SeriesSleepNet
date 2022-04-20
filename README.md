@@ -1,7 +1,7 @@
 # SeriesSleepNet
-Minji Lee, Heon-Gyu Kwak, Hyeong-Jin Kim, Dong-Ok Won, and Seong-Whan Lee, "SeriesSleepNet: An EEG Time Series Model with
-Partial Data Augmentation Using Single-Channel
-EEG for Automatic Sleep Stage Scoring*.
+Minji Lee, Heon-Gyu Kwak, Hyeong-Jin Kim, Dong-Ok Won, and Seong-Whan Lee, "SeriesSleepNet: An Time Series Model with Partial
+Data Augmentation Using Single-Channel EEG
+for Automatic Sleep Stage Scoring*.
 
 <img src="/img/arch.png" width="100%" height="100%"></img>
 
@@ -27,7 +27,7 @@ EEG for Automatic Sleep Stage Scoring*.
 + Python 3.8
 + Pytorch v1.9.0
 + numpy v1.22.2
-+ scikit-learn v 0.24.2
++ scikit-learn v0.24.2
 + tqdm v4.62.1
 + mne v0.21.0
 
