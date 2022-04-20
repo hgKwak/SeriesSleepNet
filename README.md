@@ -21,7 +21,7 @@ EEG for Automatic Sleep Stage Scoring*.
 
 3. Training and testing the SerieseSleepNet
    + Change directory to ```./SeriesSleepNet```
-   + Run main.py file
+   + Run main.py file ```ex) python main.py```
    
 ## Environment:
 + Python 3.8
