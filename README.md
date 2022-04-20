@@ -3,7 +3,7 @@ Minji Lee, Heon-Gyu Kwak, Hyeong-Jin Kim, Dong-Ok Won, and Seong-Whan Lee, "Seri
 Partial Data Augmentation Using Single-Channel
 EEG for Automatic Sleep Stage Scoring*.
 
-<img src="/img/architecture.png" width="100%" height="100%"></img>
+<img src="/img/arch.png" width="100%" height="100%"></img>
 
 ## How to run
 1. Download the Sleep-EDF and SHHS database
